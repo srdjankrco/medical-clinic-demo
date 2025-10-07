@@ -6,10 +6,13 @@ import PatientList from './pages/PatientList'
 import PatientProfile from './pages/PatientProfile'
 import AppointmentCalendar from './pages/AppointmentCalendar'
 import ClinicalDocumentation from './pages/ClinicalDocumentation'
+import ClinicalHistory from './pages/ClinicalHistory'
+import ClinicalLabs from './pages/ClinicalLabs'
 import PatientPortal from './pages/PatientPortal'
 import Reports from './pages/Reports'
 import IndiaCompliance from './pages/IndiaCompliance'
 import QatarCompliance from './pages/QatarCompliance'
+import Billing from './pages/Billing'
 
 function App() {
   return (
@@ -25,7 +28,10 @@ function App() {
           <Route path="appointments/calendar" element={<AppointmentCalendar />} />
           <Route path="appointments/new" element={<AppointmentCalendar />} />
           <Route path="clinical/documentation" element={<ClinicalDocumentation />} />
+          <Route path="clinical/history" element={<ClinicalHistory />} />
+          <Route path="clinical/labs" element={<ClinicalLabs />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="billing" element={<Billing />} />
           <Route path="compliance/india" element={<IndiaCompliance />} />
           <Route path="compliance/qatar" element={<QatarCompliance />} />
           <Route path="portal" element={<PatientPortal />} />

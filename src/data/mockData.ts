@@ -11,6 +11,10 @@ import type {
   IndiaCompliance,
   QatarCompliance,
   DashboardMetrics,
+  LabResult,
+  Immunization,
+  Claim,
+  Payment,
 } from '../types'
 
 // Seed for consistent data
@@ -242,6 +246,176 @@ export const generateProblems = (count: number): Problem[] => {
   })
 }
 
+// Generate Lab Results
+export const generateLabResults = (patients: Patient[], providers: Provider[], count: number): LabResult[] => {
+  const testPanels = [
+    {
+      name: 'Complete Blood Count',
+      code: 'CBC',
+      items: [
+        { name: 'WBC', unit: '10^9/L', range: '4.0 - 11.0' },
+        { name: 'RBC', unit: '10^12/L', range: '4.5 - 5.9' },
+        { name: 'Hemoglobin', unit: 'g/dL', range: '13.5 - 17.5' },
+        { name: 'Hematocrit', unit: '%', range: '41 - 53' },
+        { name: 'Platelets', unit: '10^9/L', range: '150 - 450' },
+      ],
+    },
+    {
+      name: 'Basic Metabolic Panel',
+      code: 'BMP',
+      items: [
+        { name: 'Sodium', unit: 'mmol/L', range: '135 - 145' },
+        { name: 'Potassium', unit: 'mmol/L', range: '3.5 - 5.0' },
+        { name: 'Chloride', unit: 'mmol/L', range: '98 - 106' },
+        { name: 'Glucose', unit: 'mg/dL', range: '70 - 99' },
+        { name: 'Creatinine', unit: 'mg/dL', range: '0.74 - 1.35' },
+      ],
+    },
+    {
+      name: 'Lipid Panel',
+      code: 'LIPID',
+      items: [
+        { name: 'Total Cholesterol', unit: 'mg/dL', range: '< 200' },
+        { name: 'HDL', unit: 'mg/dL', range: '> 40' },
+        { name: 'LDL', unit: 'mg/dL', range: '< 130' },
+        { name: 'Triglycerides', unit: 'mg/dL', range: '< 150' },
+      ],
+    },
+    {
+      name: 'HbA1c',
+      code: 'HBA1C',
+      items: [
+        { name: 'HbA1c', unit: '%', range: '4.0 - 5.6' },
+      ],
+    },
+  ] as const
+
+  const statuses: LabResult['status'][] = ['Ordered', 'In Progress', 'Completed']
+
+  return Array.from({ length: count }, (_, i) => {
+    const patient = faker.helpers.arrayElement(patients)
+    const provider = faker.helpers.arrayElement(providers)
+    const panel = faker.helpers.arrayElement(testPanels)
+    const orderDate = faker.date.recent({ days: 60 })
+    const resultDate = faker.helpers.maybe(() => faker.date.soon({ days: 7, refDate: orderDate }), {
+      probability: 0.7,
+    })
+
+    return {
+      id: `LAB-${String(i + 1).padStart(5, '0')}`,
+      patientId: patient.id,
+      testName: panel.name,
+      testCode: panel.code,
+      orderDate: orderDate.toISOString().split('T')[0],
+      resultDate: resultDate?.toISOString().split('T')[0],
+      status: resultDate ? 'Completed' : faker.helpers.arrayElement(statuses),
+      results: panel.items.map(item => {
+        const value = faker.number.float({ min: 0.8, max: 1.2, fractionDigits: 2 })
+        const numericRange = item.range.split('-')
+        const isAbnormal = faker.datatype.boolean({ probability: 0.15 })
+
+        return {
+          name: item.name,
+          unit: item.unit,
+          referenceRange: item.range,
+          value: item.range.includes('<') || item.range.includes('>')
+            ? faker.number.int({ min: 80, max: 220 }).toString()
+            : (Number(numericRange[0]) * value).toFixed(2),
+          isAbnormal,
+        }
+      }),
+      performedBy: provider.name,
+      notes: faker.helpers.maybe(() => faker.lorem.sentence(), { probability: 0.3 }),
+    }
+  })
+}
+
+type PatientImmunizationRecord = Immunization & { patientId: string }
+
+// Generate Immunizations per patient
+export const generateImmunizations = (patients: Patient[]): Record<string, Immunization[]> => {
+  const vaccines = [
+    'Influenza',
+    'COVID-19 Booster',
+    'Hepatitis B',
+    'Pneumococcal',
+    'Tetanus-Diphtheria',
+  ] as const
+
+  const immunizations: PatientImmunizationRecord[] = patients.flatMap(patient => {
+    const doseCount = faker.number.int({ min: 1, max: 4 })
+
+    return Array.from({ length: doseCount }, (_, idx) => ({
+      patientId: patient.id,
+      id: `IMM-${patient.id}-${idx + 1}`,
+      vaccineName: faker.helpers.arrayElement(vaccines),
+      date: faker.date.past({ years: 5 }).toISOString().split('T')[0],
+      doseNumber: idx + 1,
+      administeredBy: faker.person.fullName(),
+      lotNumber: `LOT${faker.string.alphanumeric({ length: 6 }).toUpperCase()}`,
+      expiryDate: faker.date.future({ years: 1 }).toISOString().split('T')[0],
+      site: faker.helpers.arrayElement(['Left Arm', 'Right Arm', 'Left Thigh', 'Right Thigh']),
+      route: 'Intramuscular',
+    }))
+  })
+
+  return immunizations.reduce<Record<string, Immunization[]>>((acc, record) => {
+    const { patientId, ...rest } = record
+    if (!acc[patientId]) {
+      acc[patientId] = []
+    }
+    acc[patientId].push(rest)
+    return acc
+  }, {})
+}
+
+// Generate Claims
+export const generateClaims = (appointments: Appointment[]): Claim[] => {
+  return appointments.slice(0, 80).map((apt, idx) => {
+    const totalAmount = faker.number.int({ min: 80, max: 500 })
+    const insuranceAmount = faker.number.int({ min: 40, max: totalAmount })
+    const patientAmount = totalAmount - insuranceAmount
+    const status = faker.helpers.arrayElement(['Draft', 'Submitted', 'Accepted', 'Rejected', 'Paid'] as const)
+
+    return {
+      id: `CLM-${String(idx + 1).padStart(5, '0')}`,
+      patientId: apt.patientId,
+      patientName: apt.patientName,
+      appointmentId: apt.id,
+      date: apt.date,
+      totalAmount,
+      insuranceAmount,
+      patientAmount,
+      status,
+      submittedDate: faker.helpers.maybe(() => faker.date.soon({ days: 5, refDate: apt.date }).toISOString().split('T')[0], { probability: 0.7 }),
+      paidDate: status === 'Paid' ? faker.date.soon({ days: 15, refDate: apt.date }).toISOString().split('T')[0] : undefined,
+      insuranceProvider: faker.helpers.arrayElement(['HealthCare Plus', 'MediShield', 'Global Health', 'Wellness Insurance']),
+      claimNumber: `CLMNO${faker.string.numeric(7)}`,
+    }
+  })
+}
+
+// Generate Payments
+export const generatePayments = (claims: Claim[]): Payment[] => {
+  return claims.slice(0, 60).map((claim, idx) => {
+    const status = claim.status === 'Paid' ? 'Completed' : faker.helpers.arrayElement(['Pending', 'Completed', 'Refunded'] as const)
+    const amount = status === 'Refunded'
+      ? faker.number.int({ min: 10, max: claim.patientAmount })
+      : claim.patientAmount + (status === 'Completed' ? claim.insuranceAmount : 0)
+
+    return {
+      id: `PAY-${String(idx + 1).padStart(5, '0')}`,
+      claimId: claim.id,
+      patientId: claim.patientId,
+      amount,
+      method: faker.helpers.arrayElement(['Cash', 'Card', 'Insurance', 'Online'] as const),
+      date: faker.date.soon({ days: 10, refDate: claim.date }).toISOString().split('T')[0],
+      status,
+      reference: `TXN${faker.string.alphanumeric({ length: 10 }).toUpperCase()}`,
+    }
+  })
+}
+
 // Generate India Compliance Data
 export const generateIndiaCompliance = (): IndiaCompliance => ({
   ceaRegistration: {
@@ -367,6 +541,10 @@ export const problems = generateProblems(20)
 export const indiaCompliance = generateIndiaCompliance()
 export const qatarCompliance = generateQatarCompliance()
 export const dashboardMetrics = generateDashboardMetrics(appointments)
+export const labResults = generateLabResults(patients, providers, 80)
+export const immunizationsByPatient = generateImmunizations(patients)
+export const claims = generateClaims(appointments)
+export const payments = generatePayments(claims)
 
 // Helper functions for data access
 export const getPatientById = (id: string) => patients.find(p => p.id === id)
